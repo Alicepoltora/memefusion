@@ -134,6 +134,54 @@ body {
     linear-gradient(270deg, rgba(79, 172, 254, 0.12), transparent 34%);
 }
 
+.fusion-result-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 32px;
+  background:
+    radial-gradient(circle at 18% 16%, rgba(255, 122, 26, 0.18), transparent 24%),
+    radial-gradient(circle at 82% 18%, rgba(79, 172, 254, 0.18), transparent 26%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.02) 42%, rgba(5, 7, 11, 0.92));
+  box-shadow:
+    0 28px 80px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.fusion-result-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 84px 84px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.7), transparent 92%);
+  pointer-events: none;
+}
+
+.fusion-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.55rem 0.85rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.fusion-stat {
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+  padding: 1rem 1rem 1.1rem;
+}
+
 .launch-button,
 .ghost-launch-button {
   display: inline-flex;

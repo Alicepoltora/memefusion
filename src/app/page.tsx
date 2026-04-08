@@ -8,11 +8,13 @@ import {
   BrainCircuit,
   Check,
   Compass,
+  Flame,
   LoaderCircle,
   MessageSquareShare,
   Radar,
   Rocket,
   Sparkle,
+  Swords,
   Waves,
 } from "lucide-react";
 import { useAccount } from "wagmi";
@@ -118,6 +120,20 @@ export default function HomePage() {
 
   const selectedIds = useMemo(
     () => new Set(selected.map((token) => token.tokenAddress)),
+    [selected],
+  );
+
+  const totalSelectedVolume = useMemo(
+    () => selected.reduce((sum, token) => sum + token.dayTrading, 0),
+    [selected],
+  );
+
+  const bestGrowth = useMemo(
+    () =>
+      selected.reduce(
+        (best, token) => (token.dayIncrease > best ? token.dayIncrease : best),
+        0,
+      ),
     [selected],
   );
 
@@ -280,8 +296,8 @@ export default function HomePage() {
               </div>
             </div>
 
-            <div className="grid gap-6 px-6 py-6 md:grid-cols-[1.05fr_0.95fr]">
-              <div className="space-y-5">
+              <div className="grid gap-6 px-6 py-6 md:grid-cols-[1.05fr_0.95fr]">
+                <div className="space-y-5">
                 <div>
                   <p className="text-[10px] uppercase tracking-[0.28em] text-white/42">
                     Selected input
@@ -343,60 +359,97 @@ export default function HomePage() {
                 </div>
               </div>
 
-              <div className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.09),rgba(255,255,255,0.03))] p-5">
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] uppercase tracking-[0.28em] text-white/42">
-                    Result signal
-                  </p>
-                  <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-lime-200">
-                    <Activity className="h-3.5 w-3.5" />
-                    Live output
-                  </div>
-                </div>
+                <div className="fusion-result-card p-5">
+                  <div className="relative z-10">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[10px] uppercase tracking-[0.28em] text-white/42">
+                        Generated concept card
+                      </p>
+                      <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-lime-200">
+                        <Activity className="h-3.5 w-3.5" />
+                        Live output
+                      </div>
+                    </div>
 
-                <div className="mt-5 space-y-4">
-                  <div className="rounded-[22px] border border-white/8 bg-black/20 p-4">
-                    <div className="flex items-center gap-3">
-                      <Sparkle className="h-4 w-4 text-orange-300" />
-                      <p className="text-sm font-semibold text-white">
-                        Strong points inherited
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      <span className="fusion-chip">
+                        <Swords className="h-3.5 w-3.5 text-orange-200" />
+                        {selected.length} source memes
+                      </span>
+                      <span className="fusion-chip">
+                        <Flame className="h-3.5 w-3.5 text-amber-200" />
+                        {formatCompact(totalSelectedVolume)} 24h volume
+                      </span>
+                      <span className="fusion-chip">
+                        <Rocket className="h-3.5 w-3.5 text-sky-200" />
+                        {bestGrowth.toFixed(2)}x best growth
+                      </span>
+                    </div>
+
+                    <div className="mt-5 rounded-[28px] border border-white/10 bg-black/20 p-5">
+                      <p className="text-[10px] uppercase tracking-[0.24em] text-white/40">
+                        Hybrid title
+                      </p>
+                      <h3 className="mt-3 text-3xl font-black uppercase tracking-[-0.05em] text-white">
+                        {fusion?.title || "Awaiting fusion run"}
+                      </h3>
+                      <div className="mt-4 inline-flex rounded-full border border-orange-200/20 bg-orange-200/10 px-4 py-2 text-sm font-black uppercase tracking-[0.22em] text-orange-100">
+                        ${fusion?.ticker || "PENDING"}
+                      </div>
+                      <p className="mt-4 text-sm leading-6 text-white/64">
+                        {fusion?.summary ||
+                          "The generated concept will appear here with a stronger presentation once you run fusion."}
                       </p>
                     </div>
-                    <div className="mt-3 space-y-2 text-sm text-white/58">
-                      {(fusion?.strongPoints || [
-                        "Fusion highlights will appear here after you select memes and press Fusion.",
-                      ]).map((point) => (
-                        <p key={point}>{point}</p>
-                      ))}
-                    </div>
-                  </div>
 
-                  <div className="rounded-[22px] border border-white/8 bg-black/20 p-4">
-                    <div className="flex items-center gap-3">
-                      <BrainCircuit className="h-4 w-4 text-amber-200" />
-                      <p className="text-sm font-semibold text-white">
-                        Blueprint
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                      <div className="fusion-stat">
+                        <p className="text-[10px] uppercase tracking-[0.22em] text-white/38">
+                          Inherited strengths
+                        </p>
+                        <div className="mt-3 space-y-2 text-sm leading-6 text-white/60">
+                          {(fusion?.strongPoints || [
+                            "The engine will list which strengths were inherited from each selected meme.",
+                          ]).map((point) => (
+                            <p key={point}>{point}</p>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="fusion-stat">
+                        <p className="text-[10px] uppercase tracking-[0.22em] text-white/38">
+                          Blueprint
+                        </p>
+                        <div className="mt-3 space-y-2 text-sm leading-6 text-white/60">
+                          {(fusion?.formatBlueprint || [
+                            "The resulting blueprint will explain how the hybrid should look, read, and spread.",
+                          ]).map((point) => (
+                            <p key={point}>{point}</p>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 rounded-[24px] border border-sky-300/18 bg-sky-300/8 p-4">
+                      <p className="text-[10px] uppercase tracking-[0.22em] text-sky-100/70">
+                        Launch angle
+                      </p>
+                      <p className="mt-3 text-sm leading-6 text-white/64">
+                        {fusion?.launchAngle ||
+                          "After synthesis, the card will include a clearer SocialFi and Four.meme launch angle."}
                       </p>
                     </div>
-                    <div className="mt-3 space-y-2 text-sm text-white/58">
-                      {(fusion?.formatBlueprint || [
-                        "The fusion blueprint will explain how the new meme should combine its chosen strengths.",
-                      ]).map((point) => (
-                        <p key={point}>{point}</p>
-                      ))}
-                    </div>
-                  </div>
 
-                  {warning ? (
-                    <div className="rounded-[22px] border border-sky-300/18 bg-sky-300/8 p-4 text-sm leading-6 text-white/62">
-                      {warning}
-                    </div>
-                  ) : null}
+                    {warning ? (
+                      <div className="mt-4 rounded-[22px] border border-amber-200/18 bg-amber-200/8 p-4 text-sm leading-6 text-white/62">
+                        {warning}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
       </section>
 
       <section className="section-divider mx-auto max-w-[1500px] px-6 py-10 sm:px-8 lg:px-10">

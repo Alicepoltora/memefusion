@@ -1,9 +1,16 @@
-import { getDefaultConfig } from '@rainbow-me/rainbowkit';
+import { createConfig, http } from 'wagmi';
 import { bsc } from 'wagmi/chains';
+import { injected } from 'wagmi/connectors';
 
-export const config = getDefaultConfig({
-    appName: 'Meme-Fusion AI',
-    projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d', // 32-char hex placeholder
+export const config = createConfig({
     chains: [bsc],
+    connectors: [
+        injected({
+            shimDisconnect: true,
+        }),
+    ],
+    transports: {
+        [bsc.id]: http(),
+    },
     ssr: false,
 });
