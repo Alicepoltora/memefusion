@@ -3,11 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import {
-  Activity,
   ArrowUpRight,
   BrainCircuit,
-  Check,
-  Compass,
   Flame,
   LoaderCircle,
   MessageSquareShare,
@@ -33,33 +30,39 @@ type FusionResponse = {
   error?: string;
 };
 
+type MemePair = {
+  id: string;
+  left: FourMemeToken;
+  right: FourMemeToken;
+};
+
 const pipeline = [
   {
-    title: "Top 24h intake",
-    body: "Memes are pulled live from Four.meme and ranked by current 24h trading activity.",
+    title: "Live Four.meme intake",
+    body: "The homepage pulls the hottest current memes directly from Four.meme.",
     icon: Radar,
   },
   {
-    title: "Multi-select fusion",
-    body: "You can select several live memes and tell the engine to merge their strongest traits.",
+    title: "Pairs of two",
+    body: "Popular memes are grouped into direct head-to-head fusion blocks for faster decisions.",
+    icon: Swords,
+  },
+  {
+    title: "Best-of-both fusion",
+    body: "The backend combines the strongest traits from each meme into one sharper hybrid concept.",
     icon: Sparkle,
   },
   {
-    title: "SocialFi output",
-    body: "The result is built to be legible, remixable, and launch-aware instead of just random text blending.",
-    icon: MessageSquareShare,
-  },
-  {
-    title: "Launch path",
-    body: "The hybrid keeps a token/launch angle so it can later route into Four.meme workflows.",
+    title: "Launch-aware output",
+    body: "The generated result still keeps a title, ticker, and launch angle for downstream use.",
     icon: Rocket,
   },
 ];
 
 const memoryLog = [
-  "Live rankings are sourced server-side from Four.meme page data instead of hardcoded demo cards.",
-  "Fusion works with multi-select input so the output inherits strengths from several active memes.",
-  "If OPENAI_API_KEY is configured in Vercel, the backend uses a real OpenAI fusion pass instead of fallback synthesis.",
+  "The homepage now shows Four.meme entries in fusion-ready pairs instead of a generic selection grid.",
+  "Each pair gets its own Fusion action so the user can compare and merge two memes instantly.",
+  "The result card is optimized to describe what was inherited from the left meme and the right meme.",
 ];
 
 function formatCompact(value: number) {
@@ -69,15 +72,34 @@ function formatCompact(value: number) {
   }).format(value);
 }
 
+function makePairs(tokens: FourMemeToken[]) {
+  const pairs: MemePair[] = [];
+
+  for (let index = 0; index < tokens.length - 1; index += 2) {
+    const left = tokens[index];
+    const right = tokens[index + 1];
+
+    if (!left || !right) continue;
+
+    pairs.push({
+      id: `${left.tokenAddress}-${right.tokenAddress}`,
+      left,
+      right,
+    });
+  }
+
+  return pairs;
+}
+
 export default function HomePage() {
   const { isConnected, address } = useAccount();
   const [tokens, setTokens] = useState<FourMemeToken[]>([]);
-  const [selected, setSelected] = useState<FourMemeToken[]>([]);
+  const [activePairId, setActivePairId] = useState<string | null>(null);
   const [fusion, setFusion] = useState<FusionResult | null>(null);
   const [fusionMode, setFusionMode] = useState<"openai" | "fallback" | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [fusing, setFusing] = useState(false);
+  const [fusingPairId, setFusingPairId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -98,7 +120,6 @@ export default function HomePage() {
 
         if (!active) return;
         setTokens(data.tokens);
-        setSelected(data.tokens.slice(0, 2));
       } catch (loadError) {
         if (!active) return;
         setError(
@@ -118,59 +139,24 @@ export default function HomePage() {
     };
   }, []);
 
-  const selectedIds = useMemo(
-    () => new Set(selected.map((token) => token.tokenAddress)),
-    [selected],
+  const pairs = useMemo(() => makePairs(tokens), [tokens]);
+  const activePair = useMemo(
+    () => pairs.find((pair) => pair.id === activePairId) ?? pairs[0] ?? null,
+    [activePairId, pairs],
   );
 
-  const totalSelectedVolume = useMemo(
-    () => selected.reduce((sum, token) => sum + token.dayTrading, 0),
-    [selected],
-  );
-
-  const bestGrowth = useMemo(
-    () =>
-      selected.reduce(
-        (best, token) => (token.dayIncrease > best ? token.dayIncrease : best),
-        0,
-      ),
-    [selected],
-  );
-
-  function toggleSelection(token: FourMemeToken) {
-    setFusion(null);
-    setFusionMode(null);
-    setWarning(null);
-
-    setSelected((current) => {
-      const exists = current.some(
-        (item) => item.tokenAddress === token.tokenAddress,
-      );
-
-      if (exists) {
-        return current.filter((item) => item.tokenAddress !== token.tokenAddress);
-      }
-
-      if (current.length >= 4) {
-        return [...current.slice(1), token];
-      }
-
-      return [...current, token];
-    });
-  }
-
-  async function runFusion() {
-    if (selected.length < 2) return;
-
+  async function runFusion(pair: MemePair) {
     try {
-      setFusing(true);
+      setFusingPairId(pair.id);
+      setActivePairId(pair.id);
       setWarning(null);
+
       const response = await fetch("/api/fusion", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ selected }),
+        body: JSON.stringify({ selected: [pair.left, pair.right] }),
       });
 
       const data = (await response.json()) as FusionResponse;
@@ -187,7 +173,7 @@ export default function HomePage() {
         fusionError instanceof Error ? fusionError.message : "Fusion failed.",
       );
     } finally {
-      setFusing(false);
+      setFusingPairId(null);
     }
   }
 
@@ -203,50 +189,24 @@ export default function HomePage() {
           <div className="max-w-3xl py-8 lg:py-14">
             <div className="mb-8 inline-flex items-center gap-3 rounded-full border border-white/12 bg-white/6 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-white/72 backdrop-blur">
               <span className="inline-block h-2 w-2 rounded-full bg-lime-300 shadow-[0_0_18px_rgba(190,242,100,0.9)]" />
-              Live Four.meme intake + real fusion flow
+              Four.meme hot pairs + one-click fusion
             </div>
 
             <p className="text-sm uppercase tracking-[0.32em] text-orange-200/70">
               Content generation + SocialFi + Web3
             </p>
             <h1 className="mt-5 max-w-4xl text-5xl font-black uppercase leading-[0.94] tracking-[-0.05em] text-white sm:text-6xl lg:text-8xl">
-              Pick the hot memes,
+              Take two hot memes,
               <br />
-              fuse the strengths,
+              merge the best,
               <br />
-              ship the hybrid.
+              output one winner.
             </h1>
             <p className="mt-6 max-w-xl text-base leading-7 text-white/72 sm:text-lg">
-              Meme-Fusion AI now pulls live Four.meme tokens ranked by current
-              24h activity, lets you multi-select the strongest candidates, and
-              generates a new hybrid concept by combining the best parts of each.
+              The homepage now pulls popular memes from Four.meme, groups them
+              into blocks of two, and lets you press <span className="font-semibold text-white">Fusion</span> to create
+              one improved hybrid that keeps the strongest parts from both.
             </p>
-
-            <div className="mt-10 flex flex-col gap-4 sm:flex-row">
-              <button
-                className="launch-button"
-                onClick={runFusion}
-                disabled={selected.length < 2 || fusing}
-              >
-                {fusing ? (
-                  <>
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
-                    Fusing now
-                  </>
-                ) : (
-                  <>
-                    Fusion
-                    <ArrowUpRight className="h-4 w-4" />
-                  </>
-                )}
-              </button>
-              <button
-                className="ghost-launch-button"
-                onClick={() => window.scrollTo({ top: 900, behavior: "smooth" })}
-              >
-                Explore top 24h memes
-              </button>
-            </div>
 
             <div className="mt-12 grid gap-6 border-t border-white/10 pt-8 text-sm text-white/72 sm:grid-cols-3">
               <div>
@@ -259,10 +219,10 @@ export default function HomePage() {
               </div>
               <div>
                 <p className="text-[10px] uppercase tracking-[0.28em] text-white/42">
-                  Selected now
+                  Pair blocks
                 </p>
                 <p className="mt-2 text-2xl font-black tracking-tight text-white">
-                  {selected.length}
+                  {pairs.length}
                 </p>
               </div>
               <div>
@@ -270,7 +230,7 @@ export default function HomePage() {
                   Fusion mode
                 </p>
                 <p className="mt-2 text-2xl font-black tracking-tight text-sky-300">
-                  {fusionMode ? fusionMode : "awaiting run"}
+                  {fusionMode || "awaiting run"}
                 </p>
               </div>
             </div>
@@ -280,35 +240,31 @@ export default function HomePage() {
             <div className="flex items-start justify-between gap-4 border-b border-white/10 px-6 py-5">
               <div>
                 <p className="text-[10px] uppercase tracking-[0.28em] text-white/42">
-                  Fusion console
+                  Best-of-two result
                 </p>
                 <h2 className="mt-2 text-2xl font-black uppercase tracking-[-0.04em] text-white">
-                  {fusion?.title || "Select several live memes"}
+                  {fusion?.title || "Pick any pair and press Fusion"}
                 </h2>
                 <p className="mt-2 max-w-sm text-sm leading-6 text-white/58">
                   {fusion?.summary ||
-                    "Choose at least two tokens from the live Four.meme top list. The backend will merge strengths like volume pull, growth momentum, and community traction into one new hybrid."}
+                    "Each pair combines two live Four.meme entries. Fusion creates one sharper concept by inheriting the strongest attributes from both sides."}
                 </p>
               </div>
 
               <div className="rounded-full border border-lime-300/25 bg-lime-300/10 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-lime-200">
-                {fusing ? "Working" : selected.length >= 2 ? "Ready" : "Pick 2+"}
+                {fusingPairId ? "Fusing" : activePair ? "Ready" : "Loading"}
               </div>
             </div>
 
-              <div className="grid gap-6 px-6 py-6 md:grid-cols-[1.05fr_0.95fr]">
-                <div className="space-y-5">
+            <div className="grid gap-6 px-6 py-6 md:grid-cols-[1.05fr_0.95fr]">
+              <div className="space-y-5">
                 <div>
                   <p className="text-[10px] uppercase tracking-[0.28em] text-white/42">
-                    Selected input
+                    Active pair
                   </p>
                   <div className="mt-4 space-y-3">
-                    {selected.length === 0 ? (
-                      <div className="rounded-[20px] border border-white/8 bg-white/[0.045] p-4 text-sm leading-6 text-white/58">
-                        No memes selected yet.
-                      </div>
-                    ) : (
-                      selected.map((item) => (
+                    {activePair ? (
+                      [activePair.left, activePair.right].map((item, index) => (
                         <div
                           key={item.tokenAddress}
                           className="rounded-[20px] border border-white/8 bg-white/[0.045] p-4 backdrop-blur-sm"
@@ -316,7 +272,7 @@ export default function HomePage() {
                           <div className="flex items-center justify-between gap-3">
                             <div>
                               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-100/80">
-                                {item.name}
+                                Source {index + 1} / {item.name}
                               </p>
                               <p className="mt-2 text-sm leading-6 text-white/66">
                                 24h volume {formatCompact(item.dayTrading)} • growth{" "}
@@ -330,6 +286,10 @@ export default function HomePage() {
                           </div>
                         </div>
                       ))
+                    ) : (
+                      <div className="rounded-[20px] border border-white/8 bg-white/[0.045] p-4 text-sm leading-6 text-white/58">
+                        No pair available yet.
+                      </div>
                     )}
                   </div>
                 </div>
@@ -343,137 +303,148 @@ export default function HomePage() {
                       {fusion?.ticker || "Pending"}
                     </p>
                     <p className="mt-2 text-sm leading-6 text-white/62">
-                      The hybrid receives a launch-ready shorthand after fusion.
+                      The fused concept gets one cleaner launch-ready identity.
                     </p>
                   </div>
 
                   <div className="rounded-[24px] border border-white/8 bg-black/20 p-5">
                     <p className="text-[10px] uppercase tracking-[0.26em] text-white/42">
-                      Launch angle
+                      Pair logic
                     </p>
-                    <p className="mt-3 text-sm leading-6 text-white/62">
-                      {fusion?.launchAngle ||
-                        "After fusion, the concept keeps a clear angle for SocialFi spread and eventual Four.meme routing."}
+                    <p className="mt-2 text-sm leading-6 text-white/62">
+                      The engine takes the best volume pull, fastest momentum,
+                      and strongest community hook from the two selected memes.
                     </p>
                   </div>
                 </div>
               </div>
 
-                <div className="fusion-result-card p-5">
-                  <div className="relative z-10">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-[10px] uppercase tracking-[0.28em] text-white/42">
-                        Generated concept card
-                      </p>
-                      <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-lime-200">
-                        <Activity className="h-3.5 w-3.5" />
-                        Live output
-                      </div>
+              <div className="fusion-result-card p-5">
+                <div className="relative z-10">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[10px] uppercase tracking-[0.28em] text-white/42">
+                      Generated concept card
+                    </p>
+                    <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-lime-200">
+                      <Sparkle className="h-3.5 w-3.5" />
+                      Best of two
                     </div>
+                  </div>
 
-                    <div className="mt-5 flex flex-wrap gap-2">
-                      <span className="fusion-chip">
-                        <Swords className="h-3.5 w-3.5 text-orange-200" />
-                        {selected.length} source memes
-                      </span>
-                      <span className="fusion-chip">
-                        <Flame className="h-3.5 w-3.5 text-amber-200" />
-                        {formatCompact(totalSelectedVolume)} 24h volume
-                      </span>
-                      <span className="fusion-chip">
-                        <Rocket className="h-3.5 w-3.5 text-sky-200" />
-                        {bestGrowth.toFixed(2)}x best growth
-                      </span>
-                    </div>
-
-                    <div className="mt-5 rounded-[28px] border border-white/10 bg-black/20 p-5">
-                      <p className="text-[10px] uppercase tracking-[0.24em] text-white/40">
-                        Hybrid title
-                      </p>
-                      <h3 className="mt-3 text-3xl font-black uppercase tracking-[-0.05em] text-white">
-                        {fusion?.title || "Awaiting fusion run"}
-                      </h3>
-                      <div className="mt-4 inline-flex rounded-full border border-orange-200/20 bg-orange-200/10 px-4 py-2 text-sm font-black uppercase tracking-[0.22em] text-orange-100">
-                        ${fusion?.ticker || "PENDING"}
-                      </div>
-                      <p className="mt-4 text-sm leading-6 text-white/64">
-                        {fusion?.summary ||
-                          "The generated concept will appear here with a stronger presentation once you run fusion."}
-                      </p>
-                    </div>
-
-                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                      <div className="fusion-stat">
-                        <p className="text-[10px] uppercase tracking-[0.22em] text-white/38">
-                          Inherited strengths
-                        </p>
-                        <div className="mt-3 space-y-2 text-sm leading-6 text-white/60">
-                          {(fusion?.strongPoints || [
-                            "The engine will list which strengths were inherited from each selected meme.",
-                          ]).map((point) => (
-                            <p key={point}>{point}</p>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="fusion-stat">
-                        <p className="text-[10px] uppercase tracking-[0.22em] text-white/38">
-                          Blueprint
-                        </p>
-                        <div className="mt-3 space-y-2 text-sm leading-6 text-white/60">
-                          {(fusion?.formatBlueprint || [
-                            "The resulting blueprint will explain how the hybrid should look, read, and spread.",
-                          ]).map((point) => (
-                            <p key={point}>{point}</p>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 rounded-[24px] border border-sky-300/18 bg-sky-300/8 p-4">
-                      <p className="text-[10px] uppercase tracking-[0.22em] text-sky-100/70">
-                        Launch angle
-                      </p>
-                      <p className="mt-3 text-sm leading-6 text-white/64">
-                        {fusion?.launchAngle ||
-                          "After synthesis, the card will include a clearer SocialFi and Four.meme launch angle."}
-                      </p>
-                    </div>
-
-                    {warning ? (
-                      <div className="mt-4 rounded-[22px] border border-amber-200/18 bg-amber-200/8 p-4 text-sm leading-6 text-white/62">
-                        {warning}
-                      </div>
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    <span className="fusion-chip">
+                      <Swords className="h-3.5 w-3.5 text-orange-200" />
+                      2 source memes
+                    </span>
+                    {activePair ? (
+                      <>
+                        <span className="fusion-chip">
+                          <Flame className="h-3.5 w-3.5 text-amber-200" />
+                          {formatCompact(
+                            activePair.left.dayTrading + activePair.right.dayTrading,
+                          )}{" "}
+                          24h volume
+                        </span>
+                        <span className="fusion-chip">
+                          <Rocket className="h-3.5 w-3.5 text-sky-200" />
+                          {Math.max(
+                            activePair.left.dayIncrease,
+                            activePair.right.dayIncrease,
+                          ).toFixed(2)}
+                          x best growth
+                        </span>
+                      </>
                     ) : null}
                   </div>
+
+                  <div className="mt-5 rounded-[28px] border border-white/10 bg-black/20 p-5">
+                    <p className="text-[10px] uppercase tracking-[0.24em] text-white/40">
+                      Hybrid title
+                    </p>
+                    <h3 className="mt-3 text-3xl font-black uppercase tracking-[-0.05em] text-white">
+                      {fusion?.title || "Awaiting fusion"}
+                    </h3>
+                    <div className="mt-4 inline-flex rounded-full border border-orange-200/20 bg-orange-200/10 px-4 py-2 text-sm font-black uppercase tracking-[0.22em] text-orange-100">
+                      ${fusion?.ticker || "PENDING"}
+                    </div>
+                    <p className="mt-4 text-sm leading-6 text-white/64">
+                      {fusion?.summary ||
+                        "Press Fusion on any pair below to generate one stronger combined meme concept."}
+                    </p>
+                  </div>
+
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                    <div className="fusion-stat">
+                      <p className="text-[10px] uppercase tracking-[0.22em] text-white/38">
+                        Left + right strengths
+                      </p>
+                      <div className="mt-3 space-y-2 text-sm leading-6 text-white/60">
+                        {(fusion?.strongPoints || [
+                          "The result will list exactly what was inherited from both source memes.",
+                        ]).map((point) => (
+                          <p key={point}>{point}</p>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="fusion-stat">
+                      <p className="text-[10px] uppercase tracking-[0.22em] text-white/38">
+                        Blueprint
+                      </p>
+                      <div className="mt-3 space-y-2 text-sm leading-6 text-white/60">
+                        {(fusion?.formatBlueprint || [
+                          "The blueprint will describe how the two source memes become one cleaner hybrid.",
+                        ]).map((point) => (
+                          <p key={point}>{point}</p>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-[24px] border border-sky-300/18 bg-sky-300/8 p-4">
+                    <p className="text-[10px] uppercase tracking-[0.22em] text-sky-100/70">
+                      Launch angle
+                    </p>
+                    <p className="mt-3 text-sm leading-6 text-white/64">
+                      {fusion?.launchAngle ||
+                        "After fusion, the app keeps one unified launch angle instead of two competing meme directions."}
+                    </p>
+                  </div>
+
+                  {warning ? (
+                    <div className="mt-4 rounded-[22px] border border-amber-200/18 bg-amber-200/8 p-4 text-sm leading-6 text-white/62">
+                      {warning}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>
           </div>
+        </div>
       </section>
 
       <section className="section-divider mx-auto max-w-[1500px] px-6 py-10 sm:px-8 lg:px-10">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-[10px] uppercase tracking-[0.32em] text-orange-200/65">
-              Live top 24h memes
+              Four.meme hot pairs
             </p>
             <h2 className="mt-4 max-w-2xl text-3xl font-black uppercase tracking-[-0.05em] text-white sm:text-4xl">
-              Select several trending Four.meme entries, then fuse them into one sharper concept.
+              Popular memes, grouped into blocks of two with direct one-click fusion.
             </h2>
           </div>
 
           <div className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-white/70">
-            Up to 4 inputs at once
+            One fusion per pair
           </div>
         </div>
 
         {loading ? (
-          <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, index) => (
+          <div className="mt-8 grid gap-6 xl:grid-cols-2">
+            {Array.from({ length: 3 }).map((_, index) => (
               <div
                 key={index}
-                className="h-64 animate-pulse rounded-[28px] border border-white/8 bg-white/[0.035]"
+                className="h-80 animate-pulse rounded-[30px] border border-white/8 bg-white/[0.035]"
               />
             ))}
           </div>
@@ -482,97 +453,96 @@ export default function HomePage() {
             {error}
           </div>
         ) : (
-          <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-            {tokens.map((token) => {
-              const isSelected = selectedIds.has(token.tokenAddress);
+          <div className="mt-8 grid gap-6 xl:grid-cols-2">
+            {pairs.map((pair) => {
+              const isActive = activePair?.id === pair.id;
+              const isFusing = fusingPairId === pair.id;
 
               return (
-                <button
-                  key={token.tokenAddress}
-                  type="button"
-                  onClick={() => toggleSelection(token)}
-                  className={`group rounded-[28px] border p-5 text-left transition duration-300 ${
-                    isSelected
-                      ? "border-orange-200/60 bg-orange-300/[0.08]"
-                      : "border-white/8 bg-white/[0.035] hover:-translate-y-1 hover:border-white/18 hover:bg-white/[0.055]"
+                <div
+                  key={pair.id}
+                  className={`rounded-[30px] border p-6 transition duration-300 ${
+                    isActive
+                      ? "border-orange-200/35 bg-orange-300/[0.06]"
+                      : "border-white/8 bg-white/[0.035]"
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-4">
-                    <img
-                      src={token.imageUrl}
-                      alt={token.name}
-                      className="h-16 w-16 rounded-2xl border border-white/10 object-cover"
-                    />
-                    <div
-                      className={`flex h-8 w-8 items-center justify-center rounded-full border ${
-                        isSelected
-                          ? "border-orange-200/50 bg-orange-200/20 text-orange-100"
-                          : "border-white/12 bg-white/[0.04] text-white/40"
-                      }`}
-                    >
-                      {isSelected ? <Check className="h-4 w-4" /> : null}
-                    </div>
-                  </div>
+                  <div className="grid gap-4 md:grid-cols-[1fr_auto_1fr] md:items-center">
+                    {[pair.left, pair.right].map((token, index) => (
+                      <div
+                        key={token.tokenAddress}
+                        className="rounded-[24px] border border-white/8 bg-black/20 p-4"
+                      >
+                        <img
+                          src={token.imageUrl}
+                          alt={token.name}
+                          className="h-16 w-16 rounded-2xl border border-white/10 object-cover"
+                        />
+                        <p className="mt-4 text-lg font-black uppercase tracking-[-0.03em] text-white">
+                          {token.name}
+                        </p>
+                        <p className="mt-2 text-[10px] uppercase tracking-[0.22em] text-white/40">
+                          source {index + 1}
+                        </p>
 
-                  <div className="mt-5">
-                    <p className="text-xl font-black uppercase tracking-[-0.04em] text-white">
-                      {token.name}
-                    </p>
-                    <p className="mt-1 text-[10px] uppercase tracking-[0.24em] text-white/40">
-                      {token.shortName || token.fullName || token.symbol}
-                    </p>
-                  </div>
+                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.2em] text-white/38">
+                              24h volume
+                            </p>
+                            <p className="mt-2 text-sm font-black text-white">
+                              {formatCompact(token.dayTrading)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.2em] text-white/38">
+                              growth
+                            </p>
+                            <p className="mt-2 text-sm font-black text-lime-300">
+                              {token.dayIncrease.toFixed(2)}x
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.2em] text-white/38">
+                              holders
+                            </p>
+                            <p className="mt-2 text-sm font-black text-white">
+                              {formatCompact(token.holderCount)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.2em] text-white/38">
+                              mcap
+                            </p>
+                            <p className="mt-2 text-sm font-black text-white">
+                              ${formatCompact(token.marketCapUsd)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
 
-                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <p className="text-[10px] uppercase tracking-[0.22em] text-white/38">
-                        24h volume
-                      </p>
-                      <p className="mt-2 text-lg font-black text-white">
-                        {formatCompact(token.dayTrading)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase tracking-[0.22em] text-white/38">
-                        24h growth
-                      </p>
-                      <p className="mt-2 text-lg font-black text-lime-300">
-                        {token.dayIncrease.toFixed(2)}x
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase tracking-[0.22em] text-white/38">
-                        Holders
-                      </p>
-                      <p className="mt-2 text-lg font-black text-white">
-                        {formatCompact(token.holderCount)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase tracking-[0.22em] text-white/38">
-                        Market cap
-                      </p>
-                      <p className="mt-2 text-lg font-black text-white">
-                        ${formatCompact(token.marketCapUsd)}
-                      </p>
+                    <div className="flex items-center justify-center">
+                      <button
+                        className="launch-button"
+                        onClick={() => void runFusion(pair)}
+                        disabled={Boolean(fusingPairId)}
+                      >
+                        {isFusing ? (
+                          <>
+                            <LoaderCircle className="h-4 w-4 animate-spin" />
+                            Fusing
+                          </>
+                        ) : (
+                          <>
+                            Fusion
+                            <ArrowUpRight className="h-4 w-4" />
+                          </>
+                        )}
+                      </button>
                     </div>
                   </div>
-
-                  <div className="mt-5 flex items-center justify-between gap-3 text-[10px] uppercase tracking-[0.22em]">
-                    <span className="text-white/50">
-                      {token.aiCreator ? "AI-created" : "Community-created"}
-                    </span>
-                    <a
-                      href={token.sourceUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-orange-100"
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      Open source
-                    </a>
-                  </div>
-                </button>
+                </div>
               );
             })}
           </div>
@@ -585,12 +555,11 @@ export default function HomePage() {
             How it works
           </p>
           <h2 className="mt-4 max-w-lg text-3xl font-black uppercase tracking-[-0.05em] text-white sm:text-4xl">
-            Real live intake, then real fusion.
+            Two in, one stronger concept out.
           </h2>
           <p className="mt-4 max-w-xl text-base leading-7 text-white/64">
-            The app ingests live Four.meme ranking data server-side, lets you
-            select multiple candidates, and turns them into one new hybrid with
-            inherited strengths rather than random averaging.
+            Instead of manually curating a basket, the homepage gives you direct
+            pair blocks so every click means one specific best-of-two fusion.
           </p>
         </div>
 
@@ -624,43 +593,40 @@ export default function HomePage() {
                 SocialFi loop
               </p>
               <h3 className="mt-3 text-3xl font-black uppercase tracking-[-0.05em] text-white">
-                The hybrid is built to travel, not just exist.
+                Every fusion starts from live market attention.
               </h3>
             </div>
             <div className="rounded-full border border-amber-200/20 bg-amber-200/10 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-amber-100">
-              Wallet-aware virality
+              Pair-by-pair signal
             </div>
           </div>
 
           <div className="mt-8 grid gap-6 md:grid-cols-3">
             <div>
-              <Compass className="h-5 w-5 text-orange-200" />
+              <Flame className="h-5 w-5 text-orange-200" />
               <p className="mt-4 text-[10px] uppercase tracking-[0.26em] text-white/38">
-                Creator ownership
+                Volume pull
               </p>
               <p className="mt-3 text-sm leading-6 text-white/58">
-                The fusion preserves source attribution so remixes can still point
-                back to the strongest upstream inputs.
+                Each pair carries current 24h attention instead of stale reference data.
               </p>
             </div>
             <div>
-              <Radar className="h-5 w-5 text-orange-200" />
+              <Swords className="h-5 w-5 text-orange-200" />
               <p className="mt-4 text-[10px] uppercase tracking-[0.26em] text-white/38">
-                Ranked attention
+                Best-vs-best
               </p>
               <p className="mt-3 text-sm leading-6 text-white/58">
-                Use live market attention from Four.meme as one of the selection
-                signals before the fusion even starts.
+                Fusion compares two candidates directly and takes the strongest angle from each.
               </p>
             </div>
             <div>
-              <Rocket className="h-5 w-5 text-orange-200" />
+              <MessageSquareShare className="h-5 w-5 text-orange-200" />
               <p className="mt-4 text-[10px] uppercase tracking-[0.26em] text-white/38">
-                Tokenization
+                Remix output
               </p>
               <p className="mt-3 text-sm leading-6 text-white/58">
-                The resulting concept already includes a title, ticker, and launch
-                angle for downstream Four.meme workflows.
+                The result is written as one cleaner meme concept ready for reposting or launch framing.
               </p>
             </div>
           </div>
@@ -671,7 +637,7 @@ export default function HomePage() {
             Fusion memory
           </p>
           <h3 className="mt-3 text-3xl font-black uppercase tracking-[-0.05em] text-white">
-            It keeps track of what is now real.
+            It now thinks in pairs.
           </h3>
 
           <div className="mt-6 space-y-3">
@@ -696,11 +662,11 @@ export default function HomePage() {
                 Runtime status
               </p>
               <h2 className="mt-4 text-3xl font-black uppercase tracking-[-0.05em] text-white sm:text-4xl">
-                Live Four.meme intake is wired. Fusion is now executable.
+                Hot memes are now displayed in fusion-ready pairs.
               </h2>
               <p className="mt-4 text-base leading-7 text-white/70">
-                The app now does more than describe the idea: it fetches trending
-                memes, supports multi-select, and runs a real backend fusion pass.
+                The homepage is optimized for quick comparisons: look at a pair,
+                press Fusion, and get one stronger combined concept.
               </p>
             </div>
 
